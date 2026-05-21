@@ -2312,7 +2312,7 @@ local function __makeInstance(className)
     local obj = {
         ClassName = tostring(className or "Instance"),
         Name = tostring(className or "Instance"),
-        Parent = nil,
+        __Parent = nil,
         Children = {},
         Attributes = {},
         Tags = {},
@@ -2461,6 +2461,7 @@ local function __makeInstance(className)
 
     return setmetatable(obj, {
         __index = function(t, k)
+            if k == "Parent" then return rawget(t, "__Parent") end
             if rawget(t, k) ~= nil then return rawget(t, k) end
             if type(k) == "string" then
                 for _, child in ipairs(rawget(t, "Children") or {}) do
@@ -2471,13 +2472,13 @@ local function __makeInstance(className)
         end,
         __newindex = function(t, k, v)
             if k == "Parent" then
-                local oldParent = rawget(t, "Parent")
+                local oldParent = rawget(t, "__Parent")
                 if oldParent and oldParent.Children then
                     for i = #oldParent.Children, 1, -1 do
                         if oldParent.Children[i] == t then table.remove(oldParent.Children, i) break end
                     end
                 end
-                rawset(t, "Parent", v)
+                rawset(t, "__Parent", v)
                 if v then
                     v.Children = v.Children or {}
                     table.insert(v.Children, t)
