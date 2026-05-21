@@ -2251,8 +2251,6 @@ game = {
     end
 }
 
-workspace = { Name = "Workspace", ClassName = "Workspace" }
-script = { Name = "TestScript", ClassName = "Script" }
 shared = {}
 _G = {}
 local function __signal()
@@ -2276,6 +2274,32 @@ local function __signal()
     }
 end
 
+local __vec3_mt = {
+    __add = function(a, b)
+        return setmetatable({ X = (a.X or 0) + (b.X or 0), Y = (a.Y or 0) + (b.Y or 0), Z = (a.Z or 0) + (b.Z or 0) }, __vec3_mt)
+    end,
+    __sub = function(a, b)
+        return setmetatable({ X = (a.X or 0) - (b.X or 0), Y = (a.Y or 0) - (b.Y or 0), Z = (a.Z or 0) - (b.Z or 0) }, __vec3_mt)
+    end,
+    __mul = function(a, b)
+        if type(a) == "number" then
+            return setmetatable({ X = a * (b.X or 0), Y = a * (b.Y or 0), Z = a * (b.Z or 0) }, __vec3_mt)
+        elseif type(b) == "number" then
+            return setmetatable({ X = (a.X or 0) * b, Y = (a.Y or 0) * b, Z = (a.Z or 0) * b }, __vec3_mt)
+        end
+        return setmetatable({ X = (a.X or 0) * (b.X or 0), Y = (a.Y or 0) * (b.Y or 0), Z = (a.Z or 0) * (b.Z or 0) }, __vec3_mt)
+    end,
+    __div = function(a, b)
+        if type(b) == "number" then
+            return setmetatable({ X = (a.X or 0) / b, Y = (a.Y or 0) / b, Z = (a.Z or 0) / b }, __vec3_mt)
+        end
+        return setmetatable({ X = (a.X or 0) / (b.X or 1), Y = (a.Y or 0) / (b.Y or 1), Z = (a.Z or 0) / (b.Z or 1) }, __vec3_mt)
+    end
+}
+local function __vec3(x, y, z)
+    return setmetatable({ X = x or 0, Y = y or 0, Z = z or 0 }, __vec3_mt)
+end
+
 local function __makeInstance(className)
     local obj = {
         ClassName = tostring(className or "Instance"),
@@ -2284,10 +2308,10 @@ local function __makeInstance(className)
         Children = {},
         Attributes = {},
         Tags = {},
-        Position = { X = 0, Y = 0, Z = 0 },
-        Size = { X = 4, Y = 1, Z = 4 },
-        Rotation = { X = 0, Y = 0, Z = 0 },
-        Orientation = { X = 0, Y = 0, Z = 0 },
+        Position = __vec3(0, 0, 0),
+        Size = __vec3(4, 1, 4),
+        Rotation = __vec3(0, 0, 0),
+        Orientation = __vec3(0, 0, 0),
         Color = { R = 1, G = 1, B = 1 },
         Anchored = true,
         CanCollide = true,
@@ -2427,7 +2451,34 @@ local function __makeInstance(className)
     obj.ChildRemoved = __signal()
     obj.AncestryChanged = __signal()
 
-    return obj
+    return setmetatable(obj, {
+        __index = function(t, k)
+            if rawget(t, k) ~= nil then return rawget(t, k) end
+            if type(k) == "string" then
+                for _, child in ipairs(rawget(t, "Children") or {}) do
+                    if child.Name == k then return child end
+                end
+            end
+            return nil
+        end,
+        __newindex = function(t, k, v)
+            if k == "Parent" then
+                local oldParent = rawget(t, "Parent")
+                if oldParent and oldParent.Children then
+                    for i = #oldParent.Children, 1, -1 do
+                        if oldParent.Children[i] == t then table.remove(oldParent.Children, i) break end
+                    end
+                end
+                rawset(t, "Parent", v)
+                if v then
+                    v.Children = v.Children or {}
+                    table.insert(v.Children, t)
+                end
+                return
+            end
+            rawset(t, k, v)
+        end
+    })
 end
 
 Instance = {
@@ -2441,13 +2492,17 @@ Instance = {
         return obj
     end
 }
+workspace = Instance.new("Workspace")
+workspace.Name = "Workspace"
+script = Instance.new("Script", workspace)
+script.Name = "TestScript"
 
 Vector3 = {
     new = function(x, y, z)
-        return { X = x or 0, Y = y or 0, Z = z or 0 }
+        return __vec3(x, y, z)
     end,
-    zero = { X = 0, Y = 0, Z = 0 },
-    one = { X = 1, Y = 1, Z = 1 }
+    zero = __vec3(0, 0, 0),
+    one = __vec3(1, 1, 1)
 }
 
 Vector2 = {
