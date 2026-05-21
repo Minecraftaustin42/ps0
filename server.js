@@ -881,7 +881,7 @@ const PROFILE_COSMETIC_CATALOG = [
     { id: 'cosmetic_pinned_game_feature', name: 'Pinned Game Creation Profile Feature', price: 850, description: 'Ability to pin a game you made at the top of your profile and write a short description of it' },
     { id: 'cosmetic_profile_font_chooser', name: 'Custom Profile Text Font Chooser', price: 725, description: 'Unlock dropdown control to set your profile text font to one of 8 fonts.' },
     { id: 'cosmetic_profile_text_color', name: 'Profile Text Color Chooser', price: 600, description: 'Unlock color-wheel control to set your profile text color.' },
-    { id: 'cosmetic_profile_worlds', name: 'Profile Worlds', price: 2500, description: 'A addition to your Playsculpt profile that enables other users to join your profile world, see your games and creations, and join them through portals, all in one place!' }
+    
 ];
 const getProfileStoreItem = (itemId) => PROFILE_THEME_CATALOG.concat(PROFILE_COSMETIC_CATALOG).find(i => i.id === itemId);
 
@@ -1661,7 +1661,7 @@ app.get('/api/me', requireAuth, (req, res) => {
 const CREATOR_CHALLENGE_POOL = [
     { id: 'parts_10', text: 'Place 10 parts in Studio', reward: 30, check: (p) => p.partsPlaced >= 10 },
     { id: 'publish_1', text: 'Publish one map update', reward: 70, check: (p) => p.publishes >= 1 },
-    { id: 'visit_city', text: 'Visit Sculpt City once', reward: 25, check: (p) => p.cityVisits >= 1 },
+    
     { id: 'play_2', text: 'Play 2 community games', reward: 35, check: (p) => p.gamesPlayed >= 2 },
     { id: 'parts_25', text: 'Place 25 parts in Studio', reward: 60, check: (p) => p.partsPlaced >= 25 },
     { id: 'like_3_games', text: 'Like 3 games', reward: 45, check: (p) => (p.likesGiven || 0) >= 3 },
@@ -2188,7 +2188,7 @@ const getEditableScriptGame = (req, res) => {
 };
 
 let luaTestFactory = null;
-const runLuaTestScript = async (source) => {
+const runLuaTestScript = async (source, ctx = {}) => {
     if (!luaTestFactory) luaTestFactory = new LuaFactory();
     const lua = await luaTestFactory.createEngine();
     const output = [];
@@ -2198,6 +2198,13 @@ const runLuaTestScript = async (source) => {
         return String(v);
     }).join(' ');
     try {
+        const workspaceObjectNames = Array.isArray(ctx.workspaceObjectNames) ? ctx.workspaceObjectNames.slice(0, 500).map(n => String(n || '').slice(0, 80)).filter(Boolean) : [];
+        const scriptParentName = String(ctx.scriptParentName || 'workspace').slice(0, 80);
+        const luaStr = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+        const workspaceSeed = workspaceObjectNames.map((name) => `do local p = Instance.new("Part", workspace); p.Name = ${luaStr(name)} end`).join('\n');
+        const scriptParentSeed = scriptParentName && scriptParentName !== 'workspace'
+            ? `local __scriptParent = workspace:FindFirstChild(${luaStr(scriptParentName)})\nif __scriptParent then script.Parent = __scriptParent end`
+            : '';
         lua.global.set('ps_print', (...args) => output.push({ type: 'print', message: formatArgs(...args) }));
         lua.global.set('ps_warn', (...args) => output.push({ type: 'warn', message: formatArgs(...args) }));
         const wrapped = `
@@ -2209,11 +2216,12 @@ __ps_debug.sethook(function()
 end, "", 1000)
 print = ps_print
 warn = ps_warn
+local __safeCall
 local function __signal()
     return {
         Connect = function(_, fn)
             if type(fn) == "function" then
-                fn(0.016)
+                __safeCall(fn, 0.016)
             end
 
             return {
@@ -2251,14 +2259,19 @@ game = {
     end
 }
 
-workspace = { Name = "Workspace", ClassName = "Workspace" }
-script = { Name = "TestScript", ClassName = "Script" }
+__safeCall = function(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        warn("Signal error (Heartbeat): " .. tostring(err))
+    end
+end
+
 shared = {}
 _G = {}
 local function __signal()
     return {
         Connect = function(_, fn)
-            if type(fn) == "function" then fn() end
+            if type(fn) == "function" then __safeCall(fn) end
             return {
                 Connected = true,
                 Disconnect = function(self)
@@ -2276,18 +2289,44 @@ local function __signal()
     }
 end
 
+local __vec3_mt = {
+    __add = function(a, b)
+        return setmetatable({ X = (a.X or 0) + (b.X or 0), Y = (a.Y or 0) + (b.Y or 0), Z = (a.Z or 0) + (b.Z or 0) }, __vec3_mt)
+    end,
+    __sub = function(a, b)
+        return setmetatable({ X = (a.X or 0) - (b.X or 0), Y = (a.Y or 0) - (b.Y or 0), Z = (a.Z or 0) - (b.Z or 0) }, __vec3_mt)
+    end,
+    __mul = function(a, b)
+        if type(a) == "number" then
+            return setmetatable({ X = a * (b.X or 0), Y = a * (b.Y or 0), Z = a * (b.Z or 0) }, __vec3_mt)
+        elseif type(b) == "number" then
+            return setmetatable({ X = (a.X or 0) * b, Y = (a.Y or 0) * b, Z = (a.Z or 0) * b }, __vec3_mt)
+        end
+        return setmetatable({ X = (a.X or 0) * (b.X or 0), Y = (a.Y or 0) * (b.Y or 0), Z = (a.Z or 0) * (b.Z or 0) }, __vec3_mt)
+    end,
+    __div = function(a, b)
+        if type(b) == "number" then
+            return setmetatable({ X = (a.X or 0) / b, Y = (a.Y or 0) / b, Z = (a.Z or 0) / b }, __vec3_mt)
+        end
+        return setmetatable({ X = (a.X or 0) / (b.X or 1), Y = (a.Y or 0) / (b.Y or 1), Z = (a.Z or 0) / (b.Z or 1) }, __vec3_mt)
+    end
+}
+local function __vec3(x, y, z)
+    return setmetatable({ X = x or 0, Y = y or 0, Z = z or 0 }, __vec3_mt)
+end
+
 local function __makeInstance(className)
     local obj = {
         ClassName = tostring(className or "Instance"),
         Name = tostring(className or "Instance"),
-        Parent = nil,
+        __Parent = nil,
         Children = {},
         Attributes = {},
         Tags = {},
-        Position = { X = 0, Y = 0, Z = 0 },
-        Size = { X = 4, Y = 1, Z = 4 },
-        Rotation = { X = 0, Y = 0, Z = 0 },
-        Orientation = { X = 0, Y = 0, Z = 0 },
+        Position = __vec3(0, 0, 0),
+        Size = __vec3(4, 1, 4),
+        Rotation = __vec3(0, 0, 0),
+        Orientation = __vec3(0, 0, 0),
         Color = { R = 1, G = 1, B = 1 },
         Anchored = true,
         CanCollide = true,
@@ -2427,7 +2466,35 @@ local function __makeInstance(className)
     obj.ChildRemoved = __signal()
     obj.AncestryChanged = __signal()
 
-    return obj
+    return setmetatable(obj, {
+        __index = function(t, k)
+            if k == "Parent" then return rawget(t, "__Parent") end
+            if rawget(t, k) ~= nil then return rawget(t, k) end
+            if type(k) == "string" then
+                for _, child in ipairs(rawget(t, "Children") or {}) do
+                    if child.Name == k then return child end
+                end
+            end
+            return nil
+        end,
+        __newindex = function(t, k, v)
+            if k == "Parent" then
+                local oldParent = rawget(t, "__Parent")
+                if oldParent and oldParent.Children then
+                    for i = #oldParent.Children, 1, -1 do
+                        if oldParent.Children[i] == t then table.remove(oldParent.Children, i) break end
+                    end
+                end
+                rawset(t, "__Parent", v)
+                if v then
+                    v.Children = v.Children or {}
+                    table.insert(v.Children, t)
+                end
+                return
+            end
+            rawset(t, k, v)
+        end
+    })
 end
 
 Instance = {
@@ -2435,19 +2502,25 @@ Instance = {
         local obj = __makeInstance(className)
         if parent then
             obj.Parent = parent
-            parent.Children = parent.Children or {}
-            table.insert(parent.Children, obj)
         end
         return obj
     end
 }
+workspace = Instance.new("Workspace")
+workspace.Name = "Workspace"
+script = Instance.new("Script", workspace)
+script.Name = "TestScript"
+local __exampleBlock = Instance.new("Part", workspace)
+__exampleBlock.Name = "Block"
+${workspaceSeed}
+${scriptParentSeed}
 
 Vector3 = {
     new = function(x, y, z)
-        return { X = x or 0, Y = y or 0, Z = z or 0 }
+        return __vec3(x, y, z)
     end,
-    zero = { X = 0, Y = 0, Z = 0 },
-    one = { X = 1, Y = 1, Z = 1 }
+    zero = __vec3(0, 0, 0),
+    one = __vec3(1, 1, 1)
 }
 
 Vector2 = {
@@ -2677,7 +2750,9 @@ if not __ok then error(__err, 0) end
 
 app.post('/api/scripts/test', requireAuth, async (req, res) => {
     const source = String(req.body?.source || '').slice(0, MAX_SCRIPT_SOURCE_LEN);
-    const result = await runLuaTestScript(source);
+    const workspaceObjectNames = Array.isArray(req.body?.workspaceObjectNames) ? req.body.workspaceObjectNames : [];
+    const scriptParentName = typeof req.body?.scriptParentName === 'string' ? req.body.scriptParentName : 'workspace';
+    const result = await runLuaTestScript(source, { workspaceObjectNames, scriptParentName });
     res.status(result.success ? 200 : 400).json(result);
 });
 
@@ -3557,40 +3632,15 @@ app.post('/api/profile-store/text-style', requireAuth, (req, res) => {
 });
 
 app.get('/api/profile-world/me', requireAuth, (req, res) => {
-    const user = db.users.find(u => u.id === req.userId);
-    if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
-    const ownedGames = (db.games || []).filter(g => g.authorId === user.id).map(g => ({ id: g.id, title: g.title }));
-    const ownedAssets = (db.toolboxItems || []).filter(i => i.authorId === user.id).map(i => ({ id: i.id, name: i.name }));
-    res.json({ profileWorld: user.profileWorld, ownedGames, ownedAssets });
+    res.status(410).json({ error: 'Profile Worlds feature was removed.' });
 });
 
 app.post('/api/profile-world/config', requireAuth, (req, res) => {
-    const user = db.users.find(u => u.id === req.userId);
-    if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
-    const equipped = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
-    if (!equipped.has('cosmetic_profile_worlds')) return res.status(403).json({ error: 'Profile Worlds must be equipped.' });
-    const gameIdsRaw = Array.isArray(req.body.gameIds) ? req.body.gameIds : [];
-    const assetIdsRaw = Array.isArray(req.body.assetIds) ? req.body.assetIds : [];
-    const greeting = String(req.body.greeting || '').slice(0, 300);
-    const ownedGameSet = new Set((db.games || []).filter(g => g.authorId === user.id).map(g => g.id));
-    const ownedAssetSet = new Set((db.toolboxItems || []).filter(i => i.authorId === user.id).map(i => i.id));
-    user.profileWorld.gameIds = gameIdsRaw.map(id => String(id)).filter(id => ownedGameSet.has(id)).slice(0, 3);
-    user.profileWorld.assetIds = assetIdsRaw.map(id => String(id)).filter(id => ownedAssetSet.has(id)).slice(0, 4);
-    user.profileWorld.greeting = greeting;
-    user.profileWorld.equipped = true;
-    saveDB();
-    res.json({ success: true, profileWorld: user.profileWorld });
+    res.status(410).json({ error: 'Profile Worlds feature was removed.' });
 });
 
 app.get('/api/profile-world/:username', (req, res) => {
-    const user = db.users.find(u => String(u.username || '').toLowerCase() === String(req.params.username || '').toLowerCase());
-    if (!user) return res.status(404).json({ error: 'User not found.' });
-    if (!user.profileWorld || !user.profileWorld.equipped) return res.status(404).json({ error: 'Profile world not equipped.' });
-    const gameIds = (user.profileWorld.gameIds || []).slice(0, 3);
-    const assetIds = (user.profileWorld.assetIds || []).slice(0, 4);
-    const games = gameIds.map(id => (db.games || []).find(g => g.id === id && g.authorId === user.id)).filter(Boolean).map(g => ({ id: g.id, title: g.title }));
-    const assets = assetIds.map(id => (db.toolboxItems || []).find(i => i.id === id && i.authorId === user.id)).filter(Boolean).map(i => ({ id: i.id, name: i.name }));
-    res.json({ ownerName: user.username, greeting: String(user.profileWorld.greeting || '').slice(0, 300), games, assets });
+    res.status(410).json({ error: 'Profile Worlds feature was removed.' });
 });
 
 app.post('/api/shop/items', requireAuth, (req, res) => {
@@ -4223,61 +4273,17 @@ app.get('/api/games/:id/analytics', requireAuth, (req, res) => {
 // SCULPT CITY ROUTES
 // ==========================================
 app.get('/api/city/info', requireAuth, (req, res) => {
-    const user = db.users.find(u => u.id === req.userId);
-    if (user.cityData) {
-        if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
-        if (typeof user.cityData.tutorialComplete === 'undefined') user.cityData.tutorialComplete = false;
-    }
-    res.json({ cityData: user.cityData, plots: db.cityPlots || [] });
+    res.status(410).json({ error: 'Sculpt City feature was removed.' });
 });
 
 app.post('/api/city/claim', requireAuth, (req, res) => {
-    const { neighborhood, plotX, plotZ } = req.body;
-    const user = db.users.find(u => u.id === req.userId);
-    
-    if (user.cityData) return res.status(400).json({ error: 'You already claimed a plot!' });
-    if (!db.cityPlots) db.cityPlots = [];
-    
-    const isTaken = db.cityPlots.find(p => p.plotX === plotX && p.plotZ === plotZ && p.neighborhood === neighborhood);
-    if (isTaken) return res.status(400).json({ error: 'Plot is already taken!' });
-
-    // Initialize the player with a Starter House and a Sedan.
-    user.cityData = { neighborhood, plotX, plotZ, houseType: 'Starter', tutorialComplete: false, vehicles: ['sedan_1'] };
-    db.cityPlots.push({
-        id: crypto.randomUUID(), userId: user.id, username: user.username,
-        neighborhood, plotX, plotZ, houseType: 'Starter'
-    });
-
-    saveDB();
-    res.json({ success: true, cityData: user.cityData });
+    res.status(410).json({ error: 'Sculpt City feature was removed.' });
 });
 
 // NEW: Economy Sync (Rewards & Vehicle Purchases)
 // NEW: Economy Sync (Rewards & Vehicle Purchases)
 app.post('/api/city/sync', requireAuth, (req, res) => {
-    const user = db.users.find(u => u.id === req.userId);
-    
-    // Grant Coins
-    if (req.body.coinsToAdd) user.coins = (user.coins || 0) + req.body.coinsToAdd;
-    
-    // Process Vehicle Purchases
-    if (user.cityData && req.body.vehicleToBuy) {
-        if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
-        if (user.coins >= req.body.cost) {
-            user.coins -= req.body.cost;
-            user.cityData.vehicles.push(req.body.vehicleToBuy);
-        } else {
-            return res.status(400).json({error: 'Not enough Sculpt Coins!'});
-        }
-    }
-    if (user.cityData && req.body.tutorialComplete === true) {
-        user.cityData.tutorialComplete = true;
-    }
-    ensureChallengeProgressDay(user);
-    if (user.challengeProgress.cityVisits < 1) user.challengeProgress.cityVisits += 1;
-    
-    saveDB();
-    res.json({ coins: user.coins, cityData: user.cityData });
+    res.status(410).json({ error: 'Sculpt City feature was removed.' });
 });
 
 app.post('/api/games/:id/play', requireAuth, (req, res) => {

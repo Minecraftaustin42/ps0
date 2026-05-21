@@ -747,7 +747,7 @@
             </div>
             <div class="navbar-links">
                 <a onclick="navigate('dashboard')">Dashboard</a>
-                <a onclick="enterSculptCity()">Sculpt City</a>
+                
                 <a onclick="navigate('library')">Library</a>
                 <a onclick="navigate('chat')">Global Chat</a>
                 <a onclick="navigate('groups')">Groups</a>
@@ -1690,6 +1690,10 @@
 	                </div>
                 <div id="prof-pinned-game" style="display:none; margin-top:10px; padding:12px; border:1px solid #e6edf3; border-radius:8px; background:#f8fbff;"></div>
                 <p id="prof-bio" style="margin:10px 0 0 0; color:#555; white-space:pre-wrap;"></p>
+                <div id="prof-bio-quick-edit" style="display:none; margin-top:8px;">
+                    <textarea id="prof-bio-quick-input" class="form-control" maxlength="400" placeholder="Edit your bio here..." style="min-height:70px;"></textarea>
+                    <button class="btn btn-sm btn-info" style="margin-top:6px;" onclick="saveQuickProfileBio()">Save Bio</button>
+                </div>
 
                 <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
                     <p style="margin: 0; color:#e74c3c; font-weight:bold;">Play Streak: <span id="prof-streak">0</span></p>
@@ -1827,8 +1831,7 @@
                             <button class="tool-btn" style="color:#9b59b6;font-weight:bold;" onclick="addPart('tool')">Tool</button>
                             <button class="tool-btn" style="color:#1abc9c;font-weight:bold;" onclick="toggleSmartObjectSidebar()">Smart Objects</button>
                             <button class="tool-btn" style="color:#95a5a6;font-weight:bold;" disabled title="Terrain editing coming soon">Terrain (Soon)</button>
-                            <button class="btn btn-sm btn-warning" onclick="groupAsVehicle()">Group Vehicle</button>
-                            <button class="btn btn-sm btn-info" onclick="groupAsAircraft()">Group Aircraft</button>
+                            
                         </div>
                     </div>
                     <div class="studio-toolbar-group">
@@ -1840,6 +1843,8 @@
                             <button class="tool-btn" id="mode-scale" onclick="setTransformMode('scale')">Scale</button>
                             <button class="tool-btn" id="btn-transform-space" onclick="toggleTransformSpace()">Space: Local</button>
                             <button class="tool-btn" id="btn-multi-select" onclick="toggleMultiSelect()">Multi-Select: OFF</button>
+                            <button class="tool-btn" onclick="groupSelectionAsModel()">Group Model</button>
+                            <button class="tool-btn" onclick="ungroupSelectedModels()">Ungroup</button>
                             <button class="tool-btn btn-info" onclick="duplicateSelectedParts()">Duplicate</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteSelectedParts()">Delete</button>
                         </div>
@@ -3840,6 +3845,16 @@ else if (viewId === 'groups') {
                 document.getElementById('setting-password').value = '';
             } catch (e) {}
         };
+        const saveQuickProfileBio = async () => {
+            const profileBio = (document.getElementById('prof-bio-quick-input') || {}).value || '';
+            try {
+                const res = await apiCall('/me/settings', 'PUT', { profileBio });
+                if (currentUser && typeof res.profileBio === 'string') currentUser.profileBio = res.profileBio;
+                document.getElementById('prof-bio').innerText = res.profileBio || '';
+                showModal('Profile', 'Bio updated.');
+            } catch (e) {}
+        };
+        window.saveQuickProfileBio = saveQuickProfileBio;
         const grantEconomyCoins = async () => {
             const username = ((document.getElementById('eco-admin-username') || {}).value || '').trim();
             const amount = parseInt(((document.getElementById('eco-admin-amount') || {}).value || '0'), 10);
@@ -5918,7 +5933,11 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 }
 
                 const pwBtn = document.getElementById('profile-world-enter-btn');
-                if (pwBtn) pwBtn.style.display = profile.profileWorld && profile.profileWorld.equipped ? 'inline-flex' : 'none';
+                if (pwBtn) pwBtn.style.display = 'none';
+                const quickBio = document.getElementById('prof-bio-quick-edit');
+                if (quickBio) quickBio.style.display = (currentUser && currentUser.username && currentUser.username.toLowerCase() === profile.username.toLowerCase()) ? 'block' : 'none';
+                const quickBioInput = document.getElementById('prof-bio-quick-input');
+                if (quickBioInput) quickBioInput.value = profile.profileBio || '';
 
                 const followBtn = document.getElementById('prof-follow-btn'), friendBtn = document.getElementById('prof-friend-btn'), msgBtn = document.getElementById('prof-message-btn'), reportBtn = document.getElementById('prof-report-btn');
                 if (currentUser && currentUser.username.toLowerCase() !== profile.username.toLowerCase()) {
@@ -6027,23 +6046,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             profileWorldRenderer = null; profileWorldScene = null; profileWorldCamera = null;
         };
         window.closeProfileWorld = closeProfileWorld;
-        const enterProfileWorld = async () => {
-            if (!currentProfileData || !currentProfileData.username) return;
-            const loader = document.getElementById('profile-world-loading');
-            const overlay = document.getElementById('profile-world-overlay');
-            loader.style.display = 'flex';
-            try {
-                const worldData = await apiCall(`/profile-world/${encodeURIComponent(currentProfileData.username)}`);
-                loader.style.display = 'none';
-                overlay.style.display = 'block';
-                buildProfileWorldScene(worldData);
-                const greeting = String(worldData.greeting || '').trim();
-                if (greeting) showModal(`${worldData.ownerName}'s Greeting`, greeting.slice(0, 300));
-            } catch (e) {
-                loader.style.display = 'none';
-                showModal('Profile World', 'Unable to load profile world.');
-            }
-        };
+        const enterProfileWorld = async () => showModal('Removed', 'Profile Worlds have been removed from the platform.');
         window.enterProfileWorld = enterProfileWorld;
         const buildProfileWorldScene = (worldData) => {
             closeProfileWorld();
@@ -6414,7 +6417,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             grid.innerHTML = '<p>Loading profile cosmetics...</p>';
             try {
                 const data = await apiCall('/profile-store');
-                const cosmetics = data.cosmetics || [];
+                const cosmetics = (data.cosmetics || []).filter(c => c.id !== 'cosmetic_profile_worlds');
                 grid.innerHTML = cosmetics.length ? '' : '<p>No profile cosmetics available.</p>';
                 cosmetics.forEach(c => {
                     const card = document.createElement('div');
@@ -7696,7 +7699,13 @@ const LUA_AUTOCOMPLETE_WORDS = [...new Set([...LUA_KEYWORDS, ...LUA_EXTRA_ROBLOX
             const errorBox = document.getElementById('lua-error-box');
             errorBox.style.display = 'none';
             try {
-                const res = await apiCall('/scripts/test', 'POST', { source: scriptData.source });
+                const workspaceObjectNames = (edData.objects || []).map(o => o?.name).filter(Boolean);
+                let scriptParentName = 'workspace';
+                if (scriptData.parentId && scriptData.parentId !== 'workspace') {
+                    const parentObj = (edData.objects || []).find(o => o.id === scriptData.parentId);
+                    if (parentObj?.name) scriptParentName = parentObj.name;
+                }
+                const res = await apiCall('/scripts/test', 'POST', { source: scriptData.source, workspaceObjectNames, scriptParentName });
                 (res.output || []).forEach(o => luaLog(o.message, o.type));
                 luaLog('Test completed');
             } catch (e) {
@@ -8038,6 +8047,10 @@ function __wrap(id)
             if k == "Touched" or k == "TouchEnded" or k == "Changed" or k == "ChildAdded" or k == "ChildRemoved" or k == "AncestryChanged" then return signal(id, k) end
             local value = ps_get_property(id, k)
             if k == "Parent" and value then return __wrap(value) end
+            if value == nil and type(k) == "string" then
+                local childId = ps_find_first_child(id, k)
+                if childId then return __wrap(childId) end
+            end
             return value
         end,
         __newindex = function(t, k, v)
@@ -8061,7 +8074,16 @@ local function service(name)
 end
 game = { Name = "game", ClassName = "DataModel", GetService = function(_, name) return service(name) end }
 workspace = __wrap("workspace")
-script = { Name = "${String(scriptData.name || 'Script').replace(/"/g, '\\"')}", ClassName = "${scriptData.className}", __ps_script_id = __ps_script_id }
+script = __wrap(ps_instance_new("Script"))
+script.Name = "${String(scriptData.name || 'Script').replace(/"/g, '\\"')}"
+local __script_parent_id = "${String(scriptData.parentId || 'workspace').replace(/"/g, '\\"')}"
+if __script_parent_id == "workspace" or __script_parent_id == "" then
+    script.Parent = workspace
+else
+    local __parent_obj = __wrap(__script_parent_id)
+    if __parent_obj then script.Parent = __parent_obj else script.Parent = workspace end
+end
+script.__ps_script_id = __ps_script_id
 shared = shared or {}
 _G = _G or {}
 Instance = { new = function(className, parent) local obj = __wrap(ps_instance_new(className)); if parent then obj.Parent = parent end; return obj end }
@@ -8137,14 +8159,20 @@ collectgarbage = nil
                 lua.global.set('ps_instance_new', className => this.instanceNew(className));
                 lua.global.set('ps_set_parent', (id, parentId) => this.setParent(id, parentId));
                 lua.global.set('ps_set_property', (id, key, value) => this.setProperty(id, key, value));
-                lua.global.set('ps_get_property', (id, key) => this.getProperty(id, key));
+                lua.global.set('ps_get_property', (id, key) => {
+                    const value = this.getProperty(id, key);
+                    return value === null ? undefined : value;
+                });
                 lua.global.set('ps_destroy', id => this.destroyInstance(id));
                 lua.global.set('ps_clone', id => this.cloneInstance(id));
                 lua.global.set('ps_get_children', id => this.getChildren(id));
-                lua.global.set('ps_find_first_child', (id, name) => this.findFirstChild(id, name));
+                lua.global.set('ps_find_first_child', (id, name) => this.findFirstChild(id, name) || undefined);
                 lua.global.set('ps_connect', (id, eventName, cb) => this.connectSignal(id, eventName, cb));
                 lua.global.set('ps_disconnect', id => this.disconnectSignal(id));
-                lua.global.set('ps_get_attribute', (id, key) => this.instances.get(id)?.attributes?.[key] ?? null);
+                lua.global.set('ps_get_attribute', (id, key) => {
+                    const value = this.instances.get(id)?.attributes?.[key];
+                    return value === null ? undefined : value;
+                });
                 lua.global.set('ps_set_attribute', (id, key, value) => { const inst = this.instances.get(id); if (inst) inst.attributes[key] = value; });
                 lua.global.set('ps_add_tag', (id, tag) => this.instances.get(id)?.tags?.add(String(tag)));
                 lua.global.set('ps_remove_tag', (id, tag) => this.instances.get(id)?.tags?.delete(String(tag)));
@@ -9393,6 +9421,12 @@ document.addEventListener('keydown', (e) => {
             const list = document.getElementById('explorer-list');
             if (!list) return;
             const html = [];
+            const childrenByParent = new Map();
+            (edData.objects || []).forEach(obj => {
+                const p = obj.parentId || null;
+                if (!childrenByParent.has(p)) childrenByParent.set(p, []);
+                childrenByParent.get(p).push(obj);
+            });
             html.push(`<div class="explorer-item ${isEditingSettings ? 'selected' : ''}" data-kind="settings" onclick="selectSettings()"><span>World Settings</span></div>`);
 
             if (edData.spawn) {
@@ -9400,20 +9434,22 @@ document.addEventListener('keydown', (e) => {
                 html.push(`<div class="explorer-item ${isSel ? 'selected' : ''}" data-kind="spawn" onclick="selectObjectById('spawn', event.shiftKey)"><span>Spawn Point</span></div>`);
             }
 
-            edData.objects.forEach(obj => {
+            const pushObjectNode = (obj, depth = 0) => {
                 const isSel = selectedObjects.some(m => m.userData.id === obj.id);
                 const scriptIndicator = (obj.script && obj.script.trim() !== '') ? '<span style="color:#f1c40f; margin-right:5px;">●</span>' : '';
                 const safeName = String(obj.name || 'Part').replace(/'/g, "\\'");
                 html.push(`
                     <div class="explorer-item ${isSel ? 'selected' : ''}" data-kind="object" data-id="${obj.id}" onclick="selectObjectById('${obj.id}', event.shiftKey)">
-                        <span ondblclick="renameObject('${obj.id}', '${safeName}')">${scriptIndicator}${obj.name}</span>
+                        <span ondblclick="renameObject('${obj.id}', '${safeName}')" style="padding-left:${depth * 14}px;">${scriptIndicator}${obj.name}</span>
                         <div>
                             <button style="background:none; border:none; cursor:pointer;" title="Edit Lua Script" onclick="event.stopPropagation(); openLuaStudioForObject('${obj.id}')">Lua</button>
                             <button style="background:none; border:none; cursor:pointer;" title="Rename" onclick="event.stopPropagation(); renameObject('${obj.id}', '${safeName}')">??</button>
                         </div>
                     </div>
                 `);
-            });
+                (childrenByParent.get(obj.id) || []).forEach(child => pushObjectNode(child, depth + 1));
+            };
+            (childrenByParent.get(null) || []).forEach(rootObj => pushObjectNode(rootObj, 0));
             list.innerHTML = html.join('');
         };
 
@@ -10487,6 +10523,14 @@ playerObj = {
                     e.preventDefault();
                     if (isTeamCreateLocked()) showModal('Team Create', 'Redo is disabled in Team Create right now to protect collaborator edits.');
                     else redo();
+                }
+                else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+                    e.preventDefault();
+                    groupSelectionAsModel();
+                }
+                else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'u') {
+                    e.preventDefault();
+                    ungroupSelectedModels();
                 }
                 else if (e.key === 'Delete' || e.key === 'Backspace') {
                     e.preventDefault();
@@ -13116,69 +13160,53 @@ const resetServerLeaderboardUI = () => {
 
 
 // --- VEHICLE GROUPING ENGINE ---
-        const groupAsVehicle = () => {
-            if (selectedObjects.length < 1) return showModal('Select Parts', 'Hold Shift and click multiple parts to group them into a vehicle.');
-            const primary = selectedObjects[selectedObjects.length - 1];
-
-            const groupObj = {
-                id: crypto.randomUUID(), name: 'Vehicle', type: 'vehicle',
-                position: { x: primary.position.x, y: primary.position.y, z: primary.position.z },
-                rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 },
-                children: [], script: '' // Vehicles can hold their own scripts!
-            };
-
-            let partsIncluded = 0;
-            selectedObjects.forEach(mesh => {
-                if (mesh.userData.isSpawn) return;
-                const objData = edData.objects.find(o => o.id === mesh.userData.id);
-                if (objData) {
-                    objData.position.x -= groupObj.position.x;
-                    objData.position.y -= groupObj.position.y;
-                    objData.position.z -= groupObj.position.z;
-                    groupObj.children.push(objData);
-                    edData.objects = edData.objects.filter(o => o.id !== objData.id);
-                    partsIncluded++;
-                }
-            });
-
-            if (partsIncluded > 0) {
-                edData.objects.push(groupObj);
-                selectObject(null);
-                buildEditorScene(); recordEdit();
-                showModal('Vehicle Created!', 'Parts grouped. Add a script to the vehicle and a seat to drive it!');
+        const groupAsVehicle = () => showModal('Removed', 'Group Vehicle has been removed.');
+const groupAsAircraft = () => showModal('Removed', 'Group Aircraft has been removed.');
+const groupSelectionAsModel = () => {
+    if (selectedObjects.length < 2) return showModal('Group Model', 'Select 2 or more parts, then press Ctrl+G to group.');
+    const primary = selectedObjects[selectedObjects.length - 1];
+    if (!primary || primary.userData?.isSpawn) return;
+    const groupObj = {
+        id: crypto.randomUUID(),
+        name: 'Model',
+        type: 'model',
+        position: { x: primary.position.x, y: primary.position.y, z: primary.position.z },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        children: [],
+        script: ''
+    };
+    selectedObjects.forEach(mesh => {
+        if (mesh.userData.isSpawn) return;
+        const objData = edData.objects.find(o => o.id === mesh.userData.id);
+        if (!objData || objData.id === groupObj.id) return;
+        objData.parentId = groupObj.id;
+        objData.position.x -= groupObj.position.x;
+        objData.position.y -= groupObj.position.y;
+        objData.position.z -= groupObj.position.z;
+        groupObj.children.push(objData.id);
+    });
+    edData.objects.push(groupObj);
+    buildEditorScene(); recordEdit();
+};
+const ungroupSelectedModels = () => {
+    const models = selectedObjects
+        .map(m => edData.objects.find(o => o.id === m.userData?.id))
+        .filter(o => o && o.type === 'model');
+    if (!models.length) return showModal('Ungroup', 'Select a model, then press Ctrl+U to ungroup.');
+    models.forEach(model => {
+        (edData.objects || []).forEach(obj => {
+            if (obj.parentId === model.id) {
+                obj.parentId = null;
+                obj.position.x += (model.position?.x || 0);
+                obj.position.y += (model.position?.y || 0);
+                obj.position.z += (model.position?.z || 0);
             }
-        };
-
-
-const groupAsAircraft = () => {
-            if (selectedObjects.length < 1) return showModal('Select Parts', 'Hold Shift and click multiple parts to group them into an aircraft.');
-            const primary = selectedObjects[selectedObjects.length - 1];
-
-            const groupObj = {
-                id: crypto.randomUUID(), name: 'Aircraft', type: 'aircraft',
-                position: { x: primary.position.x, y: primary.position.y, z: primary.position.z },
-                rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 },
-                children: [], script: ''
-            };
-
-            let partsIncluded = 0;
-            selectedObjects.forEach(mesh => {
-                if (mesh.userData.isSpawn) return;
-                const objData = edData.objects.find(o => o.id === mesh.userData.id);
-                if (objData) {
-                    objData.position.x -= groupObj.position.x; objData.position.y -= groupObj.position.y; objData.position.z -= groupObj.position.z;
-                    groupObj.children.push(objData);
-                    edData.objects = edData.objects.filter(o => o.id !== objData.id);
-                    partsIncluded++;
-                }
-            });
-
-            if (partsIncluded > 0) {
-                edData.objects.push(groupObj); selectObject(null);
-                buildEditorScene(); recordEdit();
-                showModal('Aircraft Created!', 'Add an aircraft script and an Air Seat to fly it!');
-            }
-        };
+        });
+        edData.objects = edData.objects.filter(o => o.id !== model.id);
+    });
+    buildEditorScene(); recordEdit();
+};
 
 
 
@@ -13216,42 +13244,7 @@ const groupAsAircraft = () => {
         };
 
 
-        const enterSculptCity = async () => {
-            if (!currentUser) return showModal('Error', 'Log in to enter Sculpt City!');
-            document.getElementById('city-loading-screen').style.display = 'flex';
-            try {
-                cityGlobalData = await apiCall('/city/info');
-                if (cityGlobalData.cityData) {
-                    if (cityGlobalData.cityData.tutorialComplete) {
-                        document.getElementById('city-loading-screen').style.display = 'none';
-                        document.getElementById('city-intro-overlay').style.display = 'flex';
-                        document.getElementById('city-dialogue-text').innerText = "Welcome back to Sculpt City! Choose a sculpt city district to teleport to below!";
-                        document.getElementById('city-step-1').style.display = 'none';
-                        document.getElementById('city-step-2').style.display = 'none';
-                        document.getElementById('city-step-3').style.display = 'none';
-                        document.getElementById('city-step-4').style.display = 'none';
-                        document.getElementById('city-step-5').style.display = 'none';
-                        document.getElementById('city-returning-step').style.display = 'block';
-                        document.getElementById('city-district-search').value = '';
-                        renderDistrictButtons('');
-                    } else {
-                        startCityGame(cityGlobalData.cityData.neighborhood);
-                    }
-                } else {
-                    document.getElementById('city-loading-screen').style.display = 'none';
-                    document.getElementById('city-intro-overlay').style.display = 'flex';
-                    document.getElementById('city-dialogue-text').innerText = "Hey there, new citizen! Welcome to Sculpt City. I am Sculptrix, your tour guide! Let's start out by claiming some land and picking a neighborhood, shall we?";
-                    document.getElementById('city-step-1').style.display = 'block';
-                    document.getElementById('city-step-2').style.display = 'none';
-                    document.getElementById('city-step-3').style.display = 'none';
-                    document.getElementById('city-returning-step').style.display = 'none';
-                }
-            } catch(e) {
-                console.error("Sculpt City Load Error:", e);
-                document.getElementById('city-loading-screen').style.display = 'none';
-                showModal('City Error', 'Failed to load Sculpt City. Check the console for details.');
-            }
-        };
+        const enterSculptCity = async () => showModal('Removed', 'Sculpt City has been removed from the platform.');
 
         const renderDistrictButtons = (term = '') => {
             const list = document.getElementById('city-district-buttons');
