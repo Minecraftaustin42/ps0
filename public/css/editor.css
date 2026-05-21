@@ -1,0 +1,1 @@
+.editor-layout{display:grid;grid-template-columns:1fr 320px;gap:10px}@media(max-width:900px){.editor-layout{grid-template-columns:1fr}}
