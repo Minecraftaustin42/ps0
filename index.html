@@ -8158,14 +8158,20 @@ collectgarbage = nil
                 lua.global.set('ps_instance_new', className => this.instanceNew(className));
                 lua.global.set('ps_set_parent', (id, parentId) => this.setParent(id, parentId));
                 lua.global.set('ps_set_property', (id, key, value) => this.setProperty(id, key, value));
-                lua.global.set('ps_get_property', (id, key) => this.getProperty(id, key));
+                lua.global.set('ps_get_property', (id, key) => {
+                    const value = this.getProperty(id, key);
+                    return value === null ? undefined : value;
+                });
                 lua.global.set('ps_destroy', id => this.destroyInstance(id));
                 lua.global.set('ps_clone', id => this.cloneInstance(id));
                 lua.global.set('ps_get_children', id => this.getChildren(id));
                 lua.global.set('ps_find_first_child', (id, name) => this.findFirstChild(id, name));
                 lua.global.set('ps_connect', (id, eventName, cb) => this.connectSignal(id, eventName, cb));
                 lua.global.set('ps_disconnect', id => this.disconnectSignal(id));
-                lua.global.set('ps_get_attribute', (id, key) => this.instances.get(id)?.attributes?.[key] ?? null);
+                lua.global.set('ps_get_attribute', (id, key) => {
+                    const value = this.instances.get(id)?.attributes?.[key];
+                    return value === null ? undefined : value;
+                });
                 lua.global.set('ps_set_attribute', (id, key, value) => { const inst = this.instances.get(id); if (inst) inst.attributes[key] = value; });
                 lua.global.set('ps_add_tag', (id, tag) => this.instances.get(id)?.tags?.add(String(tag)));
                 lua.global.set('ps_remove_tag', (id, tag) => this.instances.get(id)?.tags?.delete(String(tag)));
