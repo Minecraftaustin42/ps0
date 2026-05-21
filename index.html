@@ -112,6 +112,10 @@
         .game-actions { display: flex; justify-content: center; gap: 5px; margin-top: 10px; flex-wrap: wrap; }
         .game-stats { font-size:12px; color:#e84393; font-weight: 600; display:flex; justify-content:center; gap: 10px; margin-top: 5px;}
         .game-stats span.plays { color: #3498db; }
+        .creator-stats-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:10px; margin-top:14px; }
+        .creator-stat-card { border:1px solid #d7deff; border-radius:10px; background:linear-gradient(180deg,#f8faff,#eef2ff); padding:10px; }
+        .creator-stat-label { font-size:11px; color:#56608f; text-transform:uppercase; font-weight:700; letter-spacing:.3px; }
+        .creator-stat-value { font-size:20px; color:#2c3e93; font-weight:800; margin-top:4px; }
 
         .shop-img { width: 60px; height: 60px; object-fit: contain; margin: 0 auto 10px auto; display: block; border: 1px dashed #ccc; background: #fdfdfd; }
 
@@ -1720,6 +1724,10 @@
                 </div>
 
                 <div id="prof-badges" style="margin-top: 15px;"></div>
+                <div id="creator-stats-panel" style="display:none;">
+                    <h3 style="margin:14px 0 8px 0; color:#303b86;">Creator Stats</h3>
+                    <div id="creator-stats-grid" class="creator-stats-grid"></div>
+                </div>
                 <button id="profile-world-enter-btn" class="btn profile-world-btn" style="display:none;" onclick="enterProfileWorld()">Enter Profile World</button>
 
                 <div class="tabs mt-20">
@@ -1953,7 +1961,12 @@
                             <h3 style="margin:0; color:#fff;">Version History</h3>
                             <button class="btn btn-sm btn-danger" onclick="document.getElementById('version-history-panel').style.display='none'">Close</button>
                         </div>
-                        <p style="color:#aaa; font-size:13px; margin-top:0;">Restore previous publishes. Click "Publish Update" after restoring to make it the active live version.</p>
+                        <div style="display:grid; grid-template-columns: 1fr 1.3fr auto; gap:8px; margin-bottom:10px;">
+                            <input id="vh-name" class="form-control" style="background:#181818; color:#fff; border:1px solid #555;" placeholder="Version name (e.g. Summer Update)">
+                            <input id="vh-notes" class="form-control" style="background:#181818; color:#fff; border:1px solid #555;" placeholder="Update notes (what changed?)">
+                            <button class="btn btn-success" onclick="saveStudioVersion()">Save Version</button>
+                        </div>
+                        <p style="color:#aaa; font-size:13px; margin-top:0;">Manage snapshots: save, restore with confirmation, duplicate to draft, and mark one version as live.</p>
                         <div id="vh-list" style="flex-grow:1; overflow-y:auto; padding-right: 10px;"></div>
                     </div>
 
@@ -5931,6 +5944,30 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 } else {
                     badgeContainer.innerHTML = `<span style="font-size:12px; color:#7f8c8d;">No badges earned yet.</span>`;
                 }
+                const creatorStatsPanel = document.getElementById('creator-stats-panel');
+                const creatorStatsGrid = document.getElementById('creator-stats-grid');
+                const createdGames = Array.isArray(profile.games) ? profile.games : [];
+                if (createdGames.length > 0 && creatorStatsPanel && creatorStatsGrid) {
+                    const totals = createdGames.reduce((acc, game) => {
+                        acc.visits += Number(game.plays || 0);
+                        acc.likes += Number(game.likes || 0);
+                        acc.favorites += Number(game.favorites || game.bookmarks || game.saves || 0);
+                        acc.playtime += Number(game.totalPlaytimeMinutes || game.playtimeMinutes || 0);
+                        acc.earnings += Number(game.earnings || game.earningsCoins || 0);
+                        return acc;
+                    }, { visits: 0, likes: 0, favorites: 0, playtime: 0, earnings: 0 });
+                    creatorStatsPanel.style.display = 'block';
+                    creatorStatsGrid.innerHTML = `
+                        <div class="creator-stat-card"><div class="creator-stat-label">Visits</div><div class="creator-stat-value">${totals.visits.toLocaleString()}</div></div>
+                        <div class="creator-stat-card"><div class="creator-stat-label">Likes</div><div class="creator-stat-value">${totals.likes.toLocaleString()}</div></div>
+                        <div class="creator-stat-card"><div class="creator-stat-label">Favorites</div><div class="creator-stat-value">${totals.favorites.toLocaleString()}</div></div>
+                        <div class="creator-stat-card"><div class="creator-stat-label">Playtime</div><div class="creator-stat-value">${Math.round(totals.playtime).toLocaleString()}m</div></div>
+                        <div class="creator-stat-card"><div class="creator-stat-label">Earnings</div><div class="creator-stat-value">${Math.round(totals.earnings).toLocaleString()} SC</div></div>
+                        <div class="creator-stat-card"><div class="creator-stat-label">Games</div><div class="creator-stat-value">${createdGames.length}</div></div>
+                    `;
+                } else if (creatorStatsPanel) {
+                    creatorStatsPanel.style.display = 'none';
+                }
 
                 const pwBtn = document.getElementById('profile-world-enter-btn');
                 if (pwBtn) pwBtn.style.display = 'none';
@@ -9280,40 +9317,90 @@ document.addEventListener('keydown', (e) => {
             reader.readAsDataURL(file);
         };
 
-        // --- Version Control Logic ---
+        // --- Version History Manager Logic ---
+        const getStudioVersionStorageKey = () => `playsculpt_studio_versions_${currentEditGameId || 'none'}`;
+        const getStudioVersions = () => {
+            if (!currentEditGameId) return [];
+            try { return JSON.parse(localStorage.getItem(getStudioVersionStorageKey()) || '[]'); } catch (e) { return []; }
+        };
+        const setStudioVersions = (versions) => {
+            if (!currentEditGameId) return;
+            localStorage.setItem(getStudioVersionStorageKey(), JSON.stringify(versions || []));
+        };
+        const createSnapshotData = () => JSON.parse(JSON.stringify(edData || { objects: [], settings: {} }));
+        const renderVersionList = (versions) => {
+            const list = document.getElementById('vh-list');
+            list.innerHTML = versions.length === 0 ? '<p style="color:#aaa;">No versions saved for this game yet.</p>' : '';
+            versions.forEach((v) => {
+                list.innerHTML += `
+                    <div style="border-bottom:1px solid #444; padding:10px 0;">
+                        <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start; flex-wrap:wrap;">
+                            <div>
+                                <strong style="color:#8ab4ff; font-size:15px;">${v.name || 'Untitled Version'} ${v.isLive ? '<span style="color:#2ecc71; font-size:12px;">(Live)</span>' : ''}</strong>
+                                <div style="font-size:11px; color:#aaa;">Saved: ${new Date(v.savedAt).toLocaleString()}</div>
+                                <div style="font-size:12px; color:#d2d8ff; margin-top:4px;">${v.notes || 'No update notes provided.'}</div>
+                            </div>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button class="btn btn-warning btn-sm" onclick="restoreVersion('${v.id}')">Restore</button>
+                                <button class="btn btn-info btn-sm" onclick="duplicateVersionToDraft('${v.id}')">Duplicate to Draft</button>
+                                <button class="btn btn-success btn-sm" onclick="markVersionLive('${v.id}')">Mark Live</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        };
         const openVersionHistory = async () => {
             if (!currentEditGameId) return;
             document.getElementById('version-history-panel').style.display = 'flex';
-            const list = document.getElementById('vh-list');
-            list.innerHTML = '<p style="color:#fff;">Loading versions...</p>';
-            try {
-                const versions = await apiCall(`/games/${currentEditGameId}/versions`);
-                list.innerHTML = versions.length === 0 ? '<p style="color:#aaa;">No versions found.</p>' : '';
-                versions.forEach((v, index) => {
-                    list.innerHTML += `
-                        <div style="border-bottom: 1px solid #444; padding: 10px 0; display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <strong style="color:#3498db; font-size:16px;">Version ${v.versionId} ${index === 0 ? '<span style="color:#2ecc71; font-size:12px;">(Live)</span>' : ''}</strong><br>
-                                <span style="font-size:11px; color:#aaa;">Published: ${new Date(v.timestamp).toLocaleString()}</span>
-                            </div>
-                            <button class="btn btn-warning btn-sm" onclick="restoreVersion(${v.versionId})">Restore Version</button>
-                        </div>
-                    `;
-                });
-            } catch(e) {}
+            renderVersionList(getStudioVersions());
         };
 
-        const restoreVersion = async (versionId) => {
-            if (!confirm('This will overwrite your current studio layout. Proceed?')) return;
-            try {
-                const res = await apiCall(`/games/${currentEditGameId}/versions/${versionId}`);
-                edData = res.gameData;
-                buildEditorScene();
-                recordEdit(true);
-                document.getElementById('version-history-panel').style.display = 'none';
-                showModal('Restored', `Restored to Version ${versionId}.\n\nClick "Publish Update" if you want to make this version live to players!`);
-            } catch(e) {}
+        const saveStudioVersion = () => {
+            if (!currentEditGameId) return showModal('Error', 'Open a game in studio first.');
+            const name = (document.getElementById('vh-name').value || '').trim() || `Version ${new Date().toLocaleString()}`;
+            const notes = (document.getElementById('vh-notes').value || '').trim();
+            const versions = getStudioVersions();
+            versions.unshift({ id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, name, notes, savedAt: Date.now(), isLive: versions.length === 0, snapshot: createSnapshotData() });
+            setStudioVersions(versions);
+            document.getElementById('vh-name').value = '';
+            document.getElementById('vh-notes').value = '';
+            renderVersionList(versions);
+            showModal('Version Saved', `"${name}" has been added to version history.`);
         };
+
+        const restoreVersion = (versionId) => {
+            const versions = getStudioVersions();
+            const target = versions.find(v => v.id === versionId);
+            if (!target) return showModal('Not Found', 'That version no longer exists.');
+            if (!confirm(`Restore "${target.name}"?\n\nThis replaces your current draft layout.`)) return;
+            edData = JSON.parse(JSON.stringify(target.snapshot || { objects: [], settings: {} }));
+            buildEditorScene();
+            recordEdit(true);
+            showModal('Restored', `Restored "${target.name}" from ${new Date(target.savedAt).toLocaleString()}.`);
+        };
+        const duplicateVersionToDraft = (versionId) => {
+            const versions = getStudioVersions();
+            const target = versions.find(v => v.id === versionId);
+            if (!target) return;
+            const copyName = `${target.name} (Draft Copy)`;
+            versions.unshift({ id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, name: copyName, notes: `Duplicated from ${target.name}. ${target.notes || ''}`.trim(), savedAt: Date.now(), isLive: false, snapshot: JSON.parse(JSON.stringify(target.snapshot || {})) });
+            setStudioVersions(versions);
+            renderVersionList(versions);
+            showModal('Draft Created', `"${copyName}" was created from an older version.`);
+        };
+        const markVersionLive = (versionId) => {
+            const versions = getStudioVersions().map(v => ({ ...v, isLive: v.id === versionId }));
+            setStudioVersions(versions);
+            renderVersionList(versions);
+            const liveVersion = versions.find(v => v.isLive);
+            if (liveVersion) showModal('Live Version Updated', `"${liveVersion.name}" is now marked as the current live version.`);
+        };
+        window.openVersionHistory = openVersionHistory;
+        window.saveStudioVersion = saveStudioVersion;
+        window.restoreVersion = restoreVersion;
+        window.duplicateVersionToDraft = duplicateVersionToDraft;
+        window.markVersionLive = markVersionLive;
 
 
 
