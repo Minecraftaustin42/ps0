@@ -7698,7 +7698,13 @@ const LUA_AUTOCOMPLETE_WORDS = [...new Set([...LUA_KEYWORDS, ...LUA_EXTRA_ROBLOX
             const errorBox = document.getElementById('lua-error-box');
             errorBox.style.display = 'none';
             try {
-                const res = await apiCall('/scripts/test', 'POST', { source: scriptData.source });
+                const workspaceObjectNames = (edData.objects || []).map(o => o?.name).filter(Boolean);
+                let scriptParentName = 'workspace';
+                if (scriptData.parentId && scriptData.parentId !== 'workspace') {
+                    const parentObj = (edData.objects || []).find(o => o.id === scriptData.parentId);
+                    if (parentObj?.name) scriptParentName = parentObj.name;
+                }
+                const res = await apiCall('/scripts/test', 'POST', { source: scriptData.source, workspaceObjectNames, scriptParentName });
                 (res.output || []).forEach(o => luaLog(o.message, o.type));
                 luaLog('Test completed');
             } catch (e) {

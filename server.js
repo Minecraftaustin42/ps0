@@ -2188,7 +2188,7 @@ const getEditableScriptGame = (req, res) => {
 };
 
 let luaTestFactory = null;
-const runLuaTestScript = async (source) => {
+const runLuaTestScript = async (source, ctx = {}) => {
     if (!luaTestFactory) luaTestFactory = new LuaFactory();
     const lua = await luaTestFactory.createEngine();
     const output = [];
@@ -2198,6 +2198,13 @@ const runLuaTestScript = async (source) => {
         return String(v);
     }).join(' ');
     try {
+        const workspaceObjectNames = Array.isArray(ctx.workspaceObjectNames) ? ctx.workspaceObjectNames.slice(0, 500).map(n => String(n || '').slice(0, 80)).filter(Boolean) : [];
+        const scriptParentName = String(ctx.scriptParentName || 'workspace').slice(0, 80);
+        const luaStr = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+        const workspaceSeed = workspaceObjectNames.map((name) => `do local p = Instance.new("Part", workspace); p.Name = ${luaStr(name)} end`).join('\n');
+        const scriptParentSeed = scriptParentName && scriptParentName !== 'workspace'
+            ? `local __scriptParent = workspace:FindFirstChild(${luaStr(scriptParentName)})\nif __scriptParent then script.Parent = __scriptParent end`
+            : '';
         lua.global.set('ps_print', (...args) => output.push({ type: 'print', message: formatArgs(...args) }));
         lua.global.set('ps_warn', (...args) => output.push({ type: 'warn', message: formatArgs(...args) }));
         const wrapped = `
@@ -2505,6 +2512,8 @@ script = Instance.new("Script", workspace)
 script.Name = "TestScript"
 local __exampleBlock = Instance.new("Part", workspace)
 __exampleBlock.Name = "Block"
+${workspaceSeed}
+${scriptParentSeed}
 
 Vector3 = {
     new = function(x, y, z)
@@ -2741,7 +2750,9 @@ if not __ok then error(__err, 0) end
 
 app.post('/api/scripts/test', requireAuth, async (req, res) => {
     const source = String(req.body?.source || '').slice(0, MAX_SCRIPT_SOURCE_LEN);
-    const result = await runLuaTestScript(source);
+    const workspaceObjectNames = Array.isArray(req.body?.workspaceObjectNames) ? req.body.workspaceObjectNames : [];
+    const scriptParentName = typeof req.body?.scriptParentName === 'string' ? req.body.scriptParentName : 'workspace';
+    const result = await runLuaTestScript(source, { workspaceObjectNames, scriptParentName });
     res.status(result.success ? 200 : 400).json(result);
 });
 
