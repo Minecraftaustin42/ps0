@@ -8046,6 +8046,10 @@ function __wrap(id)
             if k == "Touched" or k == "TouchEnded" or k == "Changed" or k == "ChildAdded" or k == "ChildRemoved" or k == "AncestryChanged" then return signal(id, k) end
             local value = ps_get_property(id, k)
             if k == "Parent" and value then return __wrap(value) end
+            if value == nil and type(k) == "string" then
+                local childId = ps_find_first_child(id, k)
+                if childId then return __wrap(childId) end
+            end
             return value
         end,
         __newindex = function(t, k, v)
@@ -8069,7 +8073,16 @@ local function service(name)
 end
 game = { Name = "game", ClassName = "DataModel", GetService = function(_, name) return service(name) end }
 workspace = __wrap("workspace")
-script = { Name = "${String(scriptData.name || 'Script').replace(/"/g, '\\"')}", ClassName = "${scriptData.className}", __ps_script_id = __ps_script_id }
+script = __wrap(ps_instance_new("Script"))
+script.Name = "${String(scriptData.name || 'Script').replace(/"/g, '\\"')}"
+local __script_parent_id = "${String(scriptData.parentId || 'workspace').replace(/"/g, '\\"')}"
+if __script_parent_id == "workspace" or __script_parent_id == "" then
+    script.Parent = workspace
+else
+    local __parent_obj = __wrap(__script_parent_id)
+    if __parent_obj then script.Parent = __parent_obj else script.Parent = workspace end
+end
+script.__ps_script_id = __ps_script_id
 shared = shared or {}
 _G = _G or {}
 Instance = { new = function(className, parent) local obj = __wrap(ps_instance_new(className)); if parent then obj.Parent = parent end; return obj end }
