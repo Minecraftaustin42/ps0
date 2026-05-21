@@ -1840,6 +1840,8 @@
                             <button class="tool-btn" id="mode-scale" onclick="setTransformMode('scale')">Scale</button>
                             <button class="tool-btn" id="btn-transform-space" onclick="toggleTransformSpace()">Space: Local</button>
                             <button class="tool-btn" id="btn-multi-select" onclick="toggleMultiSelect()">Multi-Select: OFF</button>
+                            <button class="tool-btn" onclick="groupSelectionAsModel()">Group Model</button>
+                            <button class="tool-btn" onclick="ungroupSelectedModels()">Ungroup</button>
                             <button class="tool-btn btn-info" onclick="duplicateSelectedParts()">Duplicate</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteSelectedParts()">Delete</button>
                         </div>
@@ -9393,6 +9395,12 @@ document.addEventListener('keydown', (e) => {
             const list = document.getElementById('explorer-list');
             if (!list) return;
             const html = [];
+            const childrenByParent = new Map();
+            (edData.objects || []).forEach(obj => {
+                const p = obj.parentId || null;
+                if (!childrenByParent.has(p)) childrenByParent.set(p, []);
+                childrenByParent.get(p).push(obj);
+            });
             html.push(`<div class="explorer-item ${isEditingSettings ? 'selected' : ''}" data-kind="settings" onclick="selectSettings()"><span>World Settings</span></div>`);
 
             if (edData.spawn) {
@@ -9400,20 +9408,22 @@ document.addEventListener('keydown', (e) => {
                 html.push(`<div class="explorer-item ${isSel ? 'selected' : ''}" data-kind="spawn" onclick="selectObjectById('spawn', event.shiftKey)"><span>Spawn Point</span></div>`);
             }
 
-            edData.objects.forEach(obj => {
+            const pushObjectNode = (obj, depth = 0) => {
                 const isSel = selectedObjects.some(m => m.userData.id === obj.id);
                 const scriptIndicator = (obj.script && obj.script.trim() !== '') ? '<span style="color:#f1c40f; margin-right:5px;">●</span>' : '';
                 const safeName = String(obj.name || 'Part').replace(/'/g, "\\'");
                 html.push(`
                     <div class="explorer-item ${isSel ? 'selected' : ''}" data-kind="object" data-id="${obj.id}" onclick="selectObjectById('${obj.id}', event.shiftKey)">
-                        <span ondblclick="renameObject('${obj.id}', '${safeName}')">${scriptIndicator}${obj.name}</span>
+                        <span ondblclick="renameObject('${obj.id}', '${safeName}')" style="padding-left:${depth * 14}px;">${scriptIndicator}${obj.name}</span>
                         <div>
                             <button style="background:none; border:none; cursor:pointer;" title="Edit Lua Script" onclick="event.stopPropagation(); openLuaStudioForObject('${obj.id}')">Lua</button>
                             <button style="background:none; border:none; cursor:pointer;" title="Rename" onclick="event.stopPropagation(); renameObject('${obj.id}', '${safeName}')">??</button>
                         </div>
                     </div>
                 `);
-            });
+                (childrenByParent.get(obj.id) || []).forEach(child => pushObjectNode(child, depth + 1));
+            };
+            (childrenByParent.get(null) || []).forEach(rootObj => pushObjectNode(rootObj, 0));
             list.innerHTML = html.join('');
         };
 
@@ -10487,6 +10497,14 @@ playerObj = {
                     e.preventDefault();
                     if (isTeamCreateLocked()) showModal('Team Create', 'Redo is disabled in Team Create right now to protect collaborator edits.');
                     else redo();
+                }
+                else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+                    e.preventDefault();
+                    groupSelectionAsModel();
+                }
+                else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'u') {
+                    e.preventDefault();
+                    ungroupSelectedModels();
                 }
                 else if (e.key === 'Delete' || e.key === 'Backspace') {
                     e.preventDefault();
@@ -13179,6 +13197,51 @@ const groupAsAircraft = () => {
                 showModal('Aircraft Created!', 'Add an aircraft script and an Air Seat to fly it!');
             }
         };
+const groupSelectionAsModel = () => {
+    if (selectedObjects.length < 2) return showModal('Group Model', 'Select 2 or more parts, then press Ctrl+G to group.');
+    const primary = selectedObjects[selectedObjects.length - 1];
+    if (!primary || primary.userData?.isSpawn) return;
+    const groupObj = {
+        id: crypto.randomUUID(),
+        name: 'Model',
+        type: 'model',
+        position: { x: primary.position.x, y: primary.position.y, z: primary.position.z },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        children: [],
+        script: ''
+    };
+    selectedObjects.forEach(mesh => {
+        if (mesh.userData.isSpawn) return;
+        const objData = edData.objects.find(o => o.id === mesh.userData.id);
+        if (!objData || objData.id === groupObj.id) return;
+        objData.parentId = groupObj.id;
+        objData.position.x -= groupObj.position.x;
+        objData.position.y -= groupObj.position.y;
+        objData.position.z -= groupObj.position.z;
+        groupObj.children.push(objData.id);
+    });
+    edData.objects.push(groupObj);
+    buildEditorScene(); recordEdit();
+};
+const ungroupSelectedModels = () => {
+    const models = selectedObjects
+        .map(m => edData.objects.find(o => o.id === m.userData?.id))
+        .filter(o => o && o.type === 'model');
+    if (!models.length) return showModal('Ungroup', 'Select a model, then press Ctrl+U to ungroup.');
+    models.forEach(model => {
+        (edData.objects || []).forEach(obj => {
+            if (obj.parentId === model.id) {
+                obj.parentId = null;
+                obj.position.x += (model.position?.x || 0);
+                obj.position.y += (model.position?.y || 0);
+                obj.position.z += (model.position?.z || 0);
+            }
+        });
+        edData.objects = edData.objects.filter(o => o.id !== model.id);
+    });
+    buildEditorScene(); recordEdit();
+};
 
 
 
