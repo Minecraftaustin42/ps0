@@ -881,7 +881,7 @@ const PROFILE_COSMETIC_CATALOG = [
     { id: 'cosmetic_pinned_game_feature', name: 'Pinned Game Creation Profile Feature', price: 850, description: 'Ability to pin a game you made at the top of your profile and write a short description of it' },
     { id: 'cosmetic_profile_font_chooser', name: 'Custom Profile Text Font Chooser', price: 725, description: 'Unlock dropdown control to set your profile text font to one of 8 fonts.' },
     { id: 'cosmetic_profile_text_color', name: 'Profile Text Color Chooser', price: 600, description: 'Unlock color-wheel control to set your profile text color.' },
-    { id: 'cosmetic_profile_worlds', name: 'Profile Worlds', price: 2500, description: 'A addition to your Playsculpt profile that enables other users to join your profile world, see your games and creations, and join them through portals, all in one place!' }
+    
 ];
 const getProfileStoreItem = (itemId) => PROFILE_THEME_CATALOG.concat(PROFILE_COSMETIC_CATALOG).find(i => i.id === itemId);
 
@@ -1661,7 +1661,7 @@ app.get('/api/me', requireAuth, (req, res) => {
 const CREATOR_CHALLENGE_POOL = [
     { id: 'parts_10', text: 'Place 10 parts in Studio', reward: 30, check: (p) => p.partsPlaced >= 10 },
     { id: 'publish_1', text: 'Publish one map update', reward: 70, check: (p) => p.publishes >= 1 },
-    { id: 'visit_city', text: 'Visit Sculpt City once', reward: 25, check: (p) => p.cityVisits >= 1 },
+    
     { id: 'play_2', text: 'Play 2 community games', reward: 35, check: (p) => p.gamesPlayed >= 2 },
     { id: 'parts_25', text: 'Place 25 parts in Studio', reward: 60, check: (p) => p.partsPlaced >= 25 },
     { id: 'like_3_games', text: 'Like 3 games', reward: 45, check: (p) => (p.likesGiven || 0) >= 3 },
@@ -3632,40 +3632,15 @@ app.post('/api/profile-store/text-style', requireAuth, (req, res) => {
 });
 
 app.get('/api/profile-world/me', requireAuth, (req, res) => {
-    const user = db.users.find(u => u.id === req.userId);
-    if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
-    const ownedGames = (db.games || []).filter(g => g.authorId === user.id).map(g => ({ id: g.id, title: g.title }));
-    const ownedAssets = (db.toolboxItems || []).filter(i => i.authorId === user.id).map(i => ({ id: i.id, name: i.name }));
-    res.json({ profileWorld: user.profileWorld, ownedGames, ownedAssets });
+    res.status(410).json({ error: 'Profile Worlds feature was removed.' });
 });
 
 app.post('/api/profile-world/config', requireAuth, (req, res) => {
-    const user = db.users.find(u => u.id === req.userId);
-    if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
-    const equipped = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
-    if (!equipped.has('cosmetic_profile_worlds')) return res.status(403).json({ error: 'Profile Worlds must be equipped.' });
-    const gameIdsRaw = Array.isArray(req.body.gameIds) ? req.body.gameIds : [];
-    const assetIdsRaw = Array.isArray(req.body.assetIds) ? req.body.assetIds : [];
-    const greeting = String(req.body.greeting || '').slice(0, 300);
-    const ownedGameSet = new Set((db.games || []).filter(g => g.authorId === user.id).map(g => g.id));
-    const ownedAssetSet = new Set((db.toolboxItems || []).filter(i => i.authorId === user.id).map(i => i.id));
-    user.profileWorld.gameIds = gameIdsRaw.map(id => String(id)).filter(id => ownedGameSet.has(id)).slice(0, 3);
-    user.profileWorld.assetIds = assetIdsRaw.map(id => String(id)).filter(id => ownedAssetSet.has(id)).slice(0, 4);
-    user.profileWorld.greeting = greeting;
-    user.profileWorld.equipped = true;
-    saveDB();
-    res.json({ success: true, profileWorld: user.profileWorld });
+    res.status(410).json({ error: 'Profile Worlds feature was removed.' });
 });
 
 app.get('/api/profile-world/:username', (req, res) => {
-    const user = db.users.find(u => String(u.username || '').toLowerCase() === String(req.params.username || '').toLowerCase());
-    if (!user) return res.status(404).json({ error: 'User not found.' });
-    if (!user.profileWorld || !user.profileWorld.equipped) return res.status(404).json({ error: 'Profile world not equipped.' });
-    const gameIds = (user.profileWorld.gameIds || []).slice(0, 3);
-    const assetIds = (user.profileWorld.assetIds || []).slice(0, 4);
-    const games = gameIds.map(id => (db.games || []).find(g => g.id === id && g.authorId === user.id)).filter(Boolean).map(g => ({ id: g.id, title: g.title }));
-    const assets = assetIds.map(id => (db.toolboxItems || []).find(i => i.id === id && i.authorId === user.id)).filter(Boolean).map(i => ({ id: i.id, name: i.name }));
-    res.json({ ownerName: user.username, greeting: String(user.profileWorld.greeting || '').slice(0, 300), games, assets });
+    res.status(410).json({ error: 'Profile Worlds feature was removed.' });
 });
 
 app.post('/api/shop/items', requireAuth, (req, res) => {
@@ -4298,61 +4273,17 @@ app.get('/api/games/:id/analytics', requireAuth, (req, res) => {
 // SCULPT CITY ROUTES
 // ==========================================
 app.get('/api/city/info', requireAuth, (req, res) => {
-    const user = db.users.find(u => u.id === req.userId);
-    if (user.cityData) {
-        if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
-        if (typeof user.cityData.tutorialComplete === 'undefined') user.cityData.tutorialComplete = false;
-    }
-    res.json({ cityData: user.cityData, plots: db.cityPlots || [] });
+    res.status(410).json({ error: 'Sculpt City feature was removed.' });
 });
 
 app.post('/api/city/claim', requireAuth, (req, res) => {
-    const { neighborhood, plotX, plotZ } = req.body;
-    const user = db.users.find(u => u.id === req.userId);
-    
-    if (user.cityData) return res.status(400).json({ error: 'You already claimed a plot!' });
-    if (!db.cityPlots) db.cityPlots = [];
-    
-    const isTaken = db.cityPlots.find(p => p.plotX === plotX && p.plotZ === plotZ && p.neighborhood === neighborhood);
-    if (isTaken) return res.status(400).json({ error: 'Plot is already taken!' });
-
-    // Initialize the player with a Starter House and a Sedan.
-    user.cityData = { neighborhood, plotX, plotZ, houseType: 'Starter', tutorialComplete: false, vehicles: ['sedan_1'] };
-    db.cityPlots.push({
-        id: crypto.randomUUID(), userId: user.id, username: user.username,
-        neighborhood, plotX, plotZ, houseType: 'Starter'
-    });
-
-    saveDB();
-    res.json({ success: true, cityData: user.cityData });
+    res.status(410).json({ error: 'Sculpt City feature was removed.' });
 });
 
 // NEW: Economy Sync (Rewards & Vehicle Purchases)
 // NEW: Economy Sync (Rewards & Vehicle Purchases)
 app.post('/api/city/sync', requireAuth, (req, res) => {
-    const user = db.users.find(u => u.id === req.userId);
-    
-    // Grant Coins
-    if (req.body.coinsToAdd) user.coins = (user.coins || 0) + req.body.coinsToAdd;
-    
-    // Process Vehicle Purchases
-    if (user.cityData && req.body.vehicleToBuy) {
-        if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
-        if (user.coins >= req.body.cost) {
-            user.coins -= req.body.cost;
-            user.cityData.vehicles.push(req.body.vehicleToBuy);
-        } else {
-            return res.status(400).json({error: 'Not enough Sculpt Coins!'});
-        }
-    }
-    if (user.cityData && req.body.tutorialComplete === true) {
-        user.cityData.tutorialComplete = true;
-    }
-    ensureChallengeProgressDay(user);
-    if (user.challengeProgress.cityVisits < 1) user.challengeProgress.cityVisits += 1;
-    
-    saveDB();
-    res.json({ coins: user.coins, cityData: user.cityData });
+    res.status(410).json({ error: 'Sculpt City feature was removed.' });
 });
 
 app.post('/api/games/:id/play', requireAuth, (req, res) => {
