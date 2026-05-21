@@ -2251,8 +2251,6 @@ game = {
     end
 }
 
-workspace = { Name = "Workspace", ClassName = "Workspace" }
-script = { Name = "TestScript", ClassName = "Script" }
 shared = {}
 _G = {}
 local function __signal()
@@ -2427,7 +2425,34 @@ local function __makeInstance(className)
     obj.ChildRemoved = __signal()
     obj.AncestryChanged = __signal()
 
-    return obj
+    return setmetatable(obj, {
+        __index = function(t, k)
+            if rawget(t, k) ~= nil then return rawget(t, k) end
+            if type(k) == "string" then
+                for _, child in ipairs(rawget(t, "Children") or {}) do
+                    if child.Name == k then return child end
+                end
+            end
+            return nil
+        end,
+        __newindex = function(t, k, v)
+            if k == "Parent" then
+                local oldParent = rawget(t, "Parent")
+                if oldParent and oldParent.Children then
+                    for i = #oldParent.Children, 1, -1 do
+                        if oldParent.Children[i] == t then table.remove(oldParent.Children, i) break end
+                    end
+                end
+                rawset(t, "Parent", v)
+                if v then
+                    v.Children = v.Children or {}
+                    table.insert(v.Children, t)
+                end
+                return
+            end
+            rawset(t, k, v)
+        end
+    })
 end
 
 Instance = {
@@ -2441,6 +2466,10 @@ Instance = {
         return obj
     end
 }
+workspace = Instance.new("Workspace")
+workspace.Name = "Workspace"
+script = Instance.new("Script", workspace)
+script.Name = "TestScript"
 
 Vector3 = {
     new = function(x, y, z)
