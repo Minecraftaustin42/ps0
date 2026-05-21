@@ -2209,11 +2209,12 @@ __ps_debug.sethook(function()
 end, "", 1000)
 print = ps_print
 warn = ps_warn
+local __safeCall
 local function __signal()
     return {
         Connect = function(_, fn)
             if type(fn) == "function" then
-                fn(0.016)
+                __safeCall(fn, 0.016)
             end
 
             return {
@@ -2251,12 +2252,19 @@ game = {
     end
 }
 
+__safeCall = function(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        warn("Signal error (Heartbeat): " .. tostring(err))
+    end
+end
+
 shared = {}
 _G = {}
 local function __signal()
     return {
         Connect = function(_, fn)
-            if type(fn) == "function" then fn() end
+            if type(fn) == "function" then __safeCall(fn) end
             return {
                 Connected = true,
                 Disconnect = function(self)
@@ -2486,8 +2494,6 @@ Instance = {
         local obj = __makeInstance(className)
         if parent then
             obj.Parent = parent
-            parent.Children = parent.Children or {}
-            table.insert(parent.Children, obj)
         end
         return obj
     end
@@ -2496,6 +2502,8 @@ workspace = Instance.new("Workspace")
 workspace.Name = "Workspace"
 script = Instance.new("Script", workspace)
 script.Name = "TestScript"
+local __exampleBlock = Instance.new("Part", workspace)
+__exampleBlock.Name = "Block"
 
 Vector3 = {
     new = function(x, y, z)
