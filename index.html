@@ -756,6 +756,7 @@
                 <a onclick="navigate('chat')">Global Chat</a>
                 <a onclick="navigate('groups')">Groups</a>
                 <a onclick="navigate('creator-leagues')">Creator Leagues</a>
+                <a onclick="navigate('creator-hub')">Creator Hub</a>
                 <a onclick="navigate('events')">Events</a>
                 <a onclick="navigate('create')">Create</a>
                 <a onclick="navigate('shop')">Shop</a>
@@ -1684,6 +1685,33 @@
             </div>
         </div>
 
+        <div id="view-creator-hub" class="view">
+            <div class="card">
+                <h2 class="card-title">Creator Hub</h2>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+                    <input id="creator-hub-search" class="form-control" placeholder="Search assets, games, creators..." oninput="renderCreatorHub()" style="max-width:320px;">
+                    <select id="creator-hub-filter" class="form-control" onchange="renderCreatorHub()" style="max-width:180px;">
+                        <option value="all">All Types</option><option value="asset">Assets</option><option value="game">Games</option><option value="creator">Creators</option>
+                    </select>
+                    <button class="btn btn-info" onclick="openCreatorAssetListing()">Create Asset Listing</button>
+                    <button class="btn btn-success" onclick="triggerCreatorAssetUpload()">Upload Asset</button>
+                    <input type="file" id="creator-asset-upload" style="display:none;" onchange="handleCreatorAssetUpload(event)">
+                </div>
+                <div style="display:grid; grid-template-columns:1.2fr .8fr; gap:12px;">
+                    <div>
+                        <h3>Creator Marketplace</h3><div id="creator-marketplace-grid" class="game-grid"></div>
+                        <h3>Game Ownership Trading</h3><div id="creator-trade-grid"></div>
+                        <h3>Recent Creator Activity</h3><div id="creator-activity-feed"></div>
+                    </div>
+                    <div>
+                        <h3>Featured Creators</h3><div id="creator-featured-grid" class="user-grid"></div>
+                        <h3>Portfolios</h3><div id="creator-portfolio-grid"></div>
+                        <h3>Studio / Team Listings</h3><div id="creator-team-grid"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Profile View -->
         <div id="view-profile" class="view">
             <div class="card">
@@ -1770,6 +1798,7 @@
 <button class="btn btn-info btn-sm" onclick="openSoundManager()">Sounds</button>
 <button class="btn btn-info btn-sm" onclick="openLuaStudio()">Lua Scripts</button>
                     <button class="btn btn-warning btn-sm" id="btn-versions" style="display:none;" onclick="openVersionHistory()">Versions</button>
+                    <button class="btn btn-info btn-sm" onclick="openRevenueSplitManager()">Revenue Split</button>
 
                     <select id="editor-group-publish" class="form-control" style="width: 130px; margin: 0;">
                         <option value="">My Profile</option>
@@ -1968,6 +1997,21 @@
                         </div>
                         <p style="color:#aaa; font-size:13px; margin-top:0;">Manage snapshots: save, restore with confirmation, duplicate to draft, and mark one version as live.</p>
                         <div id="vh-list" style="flex-grow:1; overflow-y:auto; padding-right: 10px;"></div>
+                    </div>
+                    <div id="revenue-split-panel" style="display:none; position:absolute; top: 26px; left: 26px; right: 26px; max-height:82%; overflow:auto; background: rgba(22,22,22,0.96); padding: 16px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 221;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <h3 style="margin:0; color:#fff;">Team Revenue Split Manager</h3>
+                            <button class="btn btn-sm btn-danger" onclick="document.getElementById('revenue-split-panel').style.display='none'">Close</button>
+                        </div>
+                        <p style="font-size:12px; color:#bbb;">Set earnings percentages per teammate. Total cannot exceed 100%.</p>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                            <input id="rev-member-name" class="form-control" placeholder="Team member username" style="max-width:220px;">
+                            <input id="rev-member-percent" class="form-control" type="number" min="0" max="100" placeholder="Percent" style="max-width:120px;">
+                            <button class="btn btn-success btn-sm" onclick="addRevenueSplitMember()">Add Member</button>
+                            <button class="btn btn-info btn-sm" onclick="saveRevenueSplitSettings()">Save Split</button>
+                        </div>
+                        <div id="rev-split-total" style="font-weight:700; color:#fff; margin-bottom:8px;">Total: 0%</div>
+                        <div id="rev-split-list"></div>
                     </div>
 
 <div id="lua-studio-panel" style="display:none; position:absolute; top:10px; left:10px; right:10px; bottom:10px; background:rgba(18,22,30,0.98); color:#e8eefc; border:1px solid #3d4d66; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.55); z-index:260; padding:12px; flex-direction:column;">
@@ -3664,6 +3708,9 @@ else if (viewId === 'chat') {
                 liveState.listPoll = setInterval(() => {
                     if (document.getElementById('view-live').classList.contains('active')) loadPlaysculptLive();
                 }, 2000);
+            }
+            else if (viewId === 'creator-hub') {
+                renderCreatorHub();
             }
 
 else if (viewId === 'groups') {
@@ -5953,16 +6000,15 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                         acc.likes += Number(game.likes || 0);
                         acc.favorites += Number(game.favorites || game.bookmarks || game.saves || 0);
                         acc.playtime += Number(game.totalPlaytimeMinutes || game.playtimeMinutes || 0);
-                        acc.earnings += Number(game.earnings || game.earningsCoins || 0);
+                        
                         return acc;
-                    }, { visits: 0, likes: 0, favorites: 0, playtime: 0, earnings: 0 });
+                    }, { visits: 0, likes: 0, favorites: 0, playtime: 0 });
                     creatorStatsPanel.style.display = 'block';
                     creatorStatsGrid.innerHTML = `
                         <div class="creator-stat-card"><div class="creator-stat-label">Visits</div><div class="creator-stat-value">${totals.visits.toLocaleString()}</div></div>
                         <div class="creator-stat-card"><div class="creator-stat-label">Likes</div><div class="creator-stat-value">${totals.likes.toLocaleString()}</div></div>
                         <div class="creator-stat-card"><div class="creator-stat-label">Favorites</div><div class="creator-stat-value">${totals.favorites.toLocaleString()}</div></div>
                         <div class="creator-stat-card"><div class="creator-stat-label">Playtime</div><div class="creator-stat-value">${Math.round(totals.playtime).toLocaleString()}m</div></div>
-                        <div class="creator-stat-card"><div class="creator-stat-label">Earnings</div><div class="creator-stat-value">${Math.round(totals.earnings).toLocaleString()} SC</div></div>
                         <div class="creator-stat-card"><div class="creator-stat-label">Games</div><div class="creator-stat-value">${createdGames.length}</div></div>
                     `;
                 } else if (creatorStatsPanel) {
@@ -8615,6 +8661,7 @@ let currentTransformSpace = 'local';
                 await populateGroupPublishDropdown();
                 if(game.groupId) document.getElementById('editor-group-publish').value = game.groupId;
                 edData = migrateLevelDataTo3D(game.gameData || {});
+                studioRevenueSplit = (edData.settings && Array.isArray(edData.settings.revenueSplit)) ? edData.settings.revenueSplit : [];
                 isTeamEditingMode = !!(game.groupId || ((game.collaborators || []).length > 0));
                 lastLocalEditTime = game.lastEditTime || Date.now();
                 teamServerEditTime = game.lastEditTime || 0;
@@ -9401,6 +9448,133 @@ document.addEventListener('keydown', (e) => {
         window.restoreVersion = restoreVersion;
         window.duplicateVersionToDraft = duplicateVersionToDraft;
         window.markVersionLive = markVersionLive;
+        let studioRevenueSplit = [];
+        const getRevenueSplitStorageKey = () => `playsculpt_revenue_split_${currentEditGameId || 'draft'}`;
+        const calcRevenueSplitTotal = () => studioRevenueSplit.reduce((n, m) => n + Number(m.percent || 0), 0);
+        const renderRevenueSplitList = () => {
+            const wrap = document.getElementById('rev-split-list');
+            const total = calcRevenueSplitTotal();
+            document.getElementById('rev-split-total').innerText = `Total: ${total}%`;
+            document.getElementById('rev-split-total').style.color = total > 100 ? '#ff7675' : '#7bed9f';
+            wrap.innerHTML = studioRevenueSplit.length ? '' : '<p style="color:#aaa;">No members added yet.</p>';
+            studioRevenueSplit.forEach((m, i) => {
+                wrap.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #3a3a3a; padding:6px 0; color:#fff;"><span>${m.username}</span><span>${m.percent}% <button class="btn btn-danger btn-sm" onclick="removeRevenueSplitMember(${i})">Remove</button></span></div>`;
+            });
+        };
+        const openRevenueSplitManager = () => {
+            try { studioRevenueSplit = JSON.parse(localStorage.getItem(getRevenueSplitStorageKey()) || '[]'); } catch (e) { studioRevenueSplit = []; }
+            document.getElementById('revenue-split-panel').style.display = 'block';
+            renderRevenueSplitList();
+        };
+        const addRevenueSplitMember = () => {
+            const username = String(document.getElementById('rev-member-name').value || '').trim();
+            const percent = Number(document.getElementById('rev-member-percent').value || 0);
+            if (!username) return showModal('Missing Name', 'Enter a team member username.');
+            if (!Number.isFinite(percent) || percent < 0) return showModal('Invalid Percentage', 'Enter a valid percentage.');
+            if (studioRevenueSplit.some(m => m.username.toLowerCase() === username.toLowerCase())) return showModal('Already Added', 'That member is already in the split list.');
+            if (calcRevenueSplitTotal() + percent > 100) return showModal('Split Too High', 'Total split cannot exceed 100%.');
+            studioRevenueSplit.push({ username, percent });
+            document.getElementById('rev-member-name').value = '';
+            document.getElementById('rev-member-percent').value = '';
+            renderRevenueSplitList();
+        };
+        const removeRevenueSplitMember = (index) => {
+            studioRevenueSplit.splice(index, 1);
+            renderRevenueSplitList();
+        };
+        const saveRevenueSplitSettings = () => {
+            const total = calcRevenueSplitTotal();
+            if (total > 100) return showModal('Split Too High', 'Total split cannot exceed 100%.');
+            localStorage.setItem(getRevenueSplitStorageKey(), JSON.stringify(studioRevenueSplit));
+            if (!edData.settings) edData.settings = {};
+            edData.settings.revenueSplit = studioRevenueSplit;
+            showModal('Revenue Split Saved', `Saved ${studioRevenueSplit.length} team members (${total}%).`);
+        };
+        window.openRevenueSplitManager = openRevenueSplitManager;
+        window.addRevenueSplitMember = addRevenueSplitMember;
+        window.removeRevenueSplitMember = removeRevenueSplitMember;
+        window.saveRevenueSplitSettings = saveRevenueSplitSettings;
+
+        const getCreatorHubState = () => {
+            try { return JSON.parse(localStorage.getItem('playsculpt_creator_hub_state') || '{}'); } catch (e) { return {}; }
+        };
+        const setCreatorHubState = (state) => localStorage.setItem('playsculpt_creator_hub_state', JSON.stringify(state || {}));
+        const ensureCreatorHubState = () => {
+            const s = getCreatorHubState();
+            s.assets = Array.isArray(s.assets) ? s.assets : [];
+            s.trades = Array.isArray(s.trades) ? s.trades : [];
+            s.activity = Array.isArray(s.activity) ? s.activity : [];
+            s.ownership = s.ownership || {};
+            setCreatorHubState(s);
+            return s;
+        };
+        const triggerCreatorAssetUpload = () => document.getElementById('creator-asset-upload').click();
+        const openCreatorAssetListing = () => {
+            const name = prompt('Asset name?');
+            if (!name) return;
+            const price = Math.max(0, Number(prompt('Price in SC? (0 for free)') || 0));
+            const s = ensureCreatorHubState();
+            s.assets.unshift({ id: crypto.randomUUID(), name, price, seller: currentUser?.username || 'Unknown', gameId: currentEditGameId || null, createdAt: Date.now() });
+            s.ownership[`${currentUser?.username || 'unknown'}:${name}`] = true;
+            s.activity.unshift(`${currentUser?.username || 'A creator'} listed ${name} for ${price} SC.`);
+            setCreatorHubState(s); renderCreatorHub();
+        };
+        const handleCreatorAssetUpload = (event) => {
+            const f = event?.target?.files?.[0];
+            if (!f) return;
+            openCreatorAssetListing();
+        };
+        const buyCreatorAsset = (assetId) => {
+            const s = ensureCreatorHubState();
+            const a = s.assets.find(x => x.id === assetId);
+            if (!a) return;
+            if (a.seller === currentUser?.username) return showModal('Blocked', 'You already own this listing.');
+            s.ownership[`${currentUser?.username}:${a.id}`] = true;
+            s.activity.unshift(`${currentUser?.username} purchased ${a.name}.`);
+            setCreatorHubState(s); renderCreatorHub();
+            showModal('Purchased', `${a.name} is now in your creator ownership records.`);
+        };
+        const offerGameTrade = (targetUser) => {
+            const gameId = currentEditGameId;
+            if (!gameId) return showModal('No Game Open', 'Open a game in studio to create a trade offer.');
+            const s = ensureCreatorHubState();
+            s.trades.unshift({ id: crypto.randomUUID(), gameId, from: currentUser?.username, to: targetUser, status: 'offered', createdAt: Date.now() });
+            s.activity.unshift(`${currentUser?.username} offered game ownership trade to ${targetUser}.`);
+            setCreatorHubState(s); renderCreatorHub();
+        };
+        const updateTradeStatus = (tradeId, status) => {
+            const s = ensureCreatorHubState();
+            const t = s.trades.find(x => x.id === tradeId);
+            if (!t) return;
+            if (status === 'accepted' && t.to !== currentUser?.username) return showModal('Blocked', 'Only the recipient can accept.');
+            if (['declined', 'canceled'].includes(status) && t.from !== currentUser?.username && t.to !== currentUser?.username) return showModal('Blocked', 'Not allowed.');
+            t.status = status;
+            s.activity.unshift(`Trade ${tradeId.slice(0,6)} was ${status}.`);
+            setCreatorHubState(s); renderCreatorHub();
+        };
+        const renderCreatorHub = () => {
+            const s = ensureCreatorHubState();
+            const q = String(document.getElementById('creator-hub-search')?.value || '').toLowerCase();
+            const f = document.getElementById('creator-hub-filter')?.value || 'all';
+            const market = document.getElementById('creator-marketplace-grid');
+            const assets = s.assets.filter(a => (!q || JSON.stringify(a).toLowerCase().includes(q)) && (f === 'all' || f === 'asset'));
+            market.innerHTML = assets.length ? '' : '<p>No assets found.</p>';
+            assets.forEach(a => market.innerHTML += `<div class="game-card"><h3>${a.name}</h3><p>Seller: ${a.seller}</p><p>${a.price} SC</p><button class="btn btn-success btn-sm" onclick="buyCreatorAsset('${a.id}')">Buy / Download</button></div>`);
+            const trades = document.getElementById('creator-trade-grid');
+            trades.innerHTML = `<button class="btn btn-info btn-sm" onclick="offerGameTrade(prompt('Offer trade to username:') || '')">Offer Trade</button>`;
+            s.trades.forEach(t => trades.innerHTML += `<div class="list-item"><span>${t.gameId} • ${t.from} → ${t.to} (${t.status})</span><span><button class="btn btn-success btn-sm" onclick="updateTradeStatus('${t.id}','accepted')">Accept</button> <button class="btn btn-warning btn-sm" onclick="updateTradeStatus('${t.id}','declined')">Decline</button> <button class="btn btn-danger btn-sm" onclick="updateTradeStatus('${t.id}','canceled')">Cancel</button></span></div>`);
+            document.getElementById('creator-activity-feed').innerHTML = (s.activity.slice(0, 12).map(i => `<div class="list-item">${i}</div>`).join('')) || '<p>No activity yet.</p>';
+            document.getElementById('creator-featured-grid').innerHTML = `<div class="user-card"><h4>Featured: ${currentUser?.username || 'Creator'}</h4><p>Profile card</p></div>`;
+            document.getElementById('creator-portfolio-grid').innerHTML = `<div class="list-item">Portfolio: ${(currentProfileData?.games || []).length} public games</div>`;
+            document.getElementById('creator-team-grid').innerHTML = `<div class="list-item">Studio Team Listings: ${(currentProfileData?.groups || []).length}</div>`;
+        };
+        window.triggerCreatorAssetUpload = triggerCreatorAssetUpload;
+        window.openCreatorAssetListing = openCreatorAssetListing;
+        window.handleCreatorAssetUpload = handleCreatorAssetUpload;
+        window.buyCreatorAsset = buyCreatorAsset;
+        window.offerGameTrade = offerGameTrade;
+        window.updateTradeStatus = updateTradeStatus;
+        window.renderCreatorHub = renderCreatorHub;
 
 
 
@@ -10142,6 +10316,7 @@ const promptClearEditor = () => {
      const clearEditor = () => {
             currentEditGameId = null;
             localEditedObjectIds.clear();
+            studioRevenueSplit = [];
             edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#7fbeff', brightness: 0.72 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [], scripts: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
@@ -10349,11 +10524,15 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
             try {
                 if (currentEditGameId) {
                     recordEdit();
+                    if (!edData.settings) edData.settings = {};
+                    edData.settings.revenueSplit = studioRevenueSplit;
                     // Hard save creates a new version point!
                     await apiCall(`/games/${currentEditGameId}/publish`, 'POST', { gameData: edData, genre });
                     showModal('Published!', 'New version is now live.', 'To Dashboard', () => { currentEditGameId = null; localEditedObjectIds.clear(); document.getElementById('editor-title').value = ''; navigate('dashboard'); });
                 } else {
                     isTeamEditingMode = false;
+                    if (!edData.settings) edData.settings = {};
+                    edData.settings.revenueSplit = studioRevenueSplit;
                     await apiCall('/games', 'POST', { title, gameData: edData, genre, groupId });
                     localStorage.removeItem('ps_autosave');
                     showModal('Published!', 'Your game is now live. You earned the Creator badge!', 'Awesome', () => { document.getElementById('editor-title').value = ''; clearEditor(); navigate('library'); });
